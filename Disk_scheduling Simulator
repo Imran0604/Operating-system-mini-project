@@ -1,0 +1,260 @@
+#!/bin/bash
+
+# Disk Scheduling Simulator in Bash
+
+# Input file paths
+disk_size_file="/home/imran0604/Input/disk_size.txt"
+head_position_file="/home/imran0604/Input/head_position.txt"
+request_queue_file="/home/imran0604/Input/Request_queue.txt"
+
+# Validate input files
+if [[ ! -f $disk_size_file || ! -f $head_position_file || ! -f $request_queue_file ]]; then
+    echo "Error: One or more input files are missing."
+    exit 1
+fi
+
+# Read inputs from files
+echo "Enter the total disk size (number of cylinders):"
+disk_size=$(cat "$disk_size_file")
+echo "Enter the initial head position:"
+head=$(cat "$head_position_file")
+echo "Enter the request queue (space-separated track numbers):" 
+requests=($(cat "$request_queue_file"))  # Read and split request queue into an array
+
+# Function to simulate FCFS
+fcfs() {
+    local requests=("$@")
+    local seek_time=0
+    local current_head=$head
+    local path=("$current_head")
+
+    for track in "${requests[@]}"; do
+        diff=$((track - current_head))
+        seek_time=$((seek_time + ${diff#-}))
+        current_head=$track
+        path+=("$current_head")
+    done
+
+    echo "FCFS Total Seek Time: $seek_time"
+    echo "FCFS Head Path: ${path[@]}"
+    simulate_head_movement "${path[@]}"
+}
+
+# Function to simulate SSTF
+sstf() {
+    local requests=("$@")
+    local seek_time=0
+    local current_head=$head
+    local path=("$current_head")
+    local unprocessed_requests=("${requests[@]}")
+
+    while [[ ${#unprocessed_requests[@]} -gt 0 ]]; do
+        closest_track=0
+        closest_distance=999999
+        for i in "${!unprocessed_requests[@]}"; do
+            track=${unprocessed_requests[i]}
+            diff=$((track - current_head))
+            diff=${diff#-}
+            if [[ $diff -lt $closest_distance ]]; then
+                closest_distance=$diff
+                closest_track=$i
+            fi
+        done
+        seek_time=$((seek_time + closest_distance))
+        current_head=${unprocessed_requests[closest_track]}
+        path+=("$current_head")
+        unset 'unprocessed_requests[closest_track]'
+        unprocessed_requests=("${unprocessed_requests[@]}")
+    done
+
+    echo "SSTF Total Seek Time: $seek_time"
+    echo "SSTF Head Path: ${path[@]}"
+    simulate_head_movement "${path[@]}"
+}
+
+# Function to simulate SCAN
+scan() {
+    local requests=("$@")
+    local seek_time=0
+    local current_head=$head
+    local path=("$current_head")
+    local left=()
+    local right=()
+
+    # Divide requests into left and right of the head
+    for track in "${requests[@]}"; do
+        if [[ $track -lt $current_head ]]; then
+            left+=("$track")
+        else
+            right+=("$track")
+        fi
+    done
+
+    # Sort both sides
+    left=($(printf '%s\n' "${left[@]}" | sort -nr))
+    right=($(printf '%s\n' "${right[@]}" | sort -n))
+
+    if [[ $direction == "left" ]]; then
+        path+=("${left[@]}" 0 "${right[@]}")
+    else
+        path+=("${right[@]}" "$disk_size" "${left[@]}")
+    fi
+
+    # Calculate seek time
+    for track in "${path[@]:1}"; do
+        diff=$((track - current_head))
+        seek_time=$((seek_time + ${diff#-}))
+        current_head=$track
+    done
+
+    echo "SCAN Total Seek Time: $seek_time"
+    echo "SCAN Head Path: ${path[@]}"
+    simulate_head_movement "${path[@]}"
+}
+
+# Function to simulate C-SCAN
+cscan() {
+    local requests=("$@")
+    local seek_time=0
+    local current_head=$head
+    local path=("$current_head")
+    local left=()
+    local right=()
+
+    # Divide requests into left and right of the head
+    for track in "${requests[@]}"; do
+        if [[ $track -lt $current_head ]]; then
+            left+=("$track")
+        else
+            right+=("$track")
+        fi
+    done
+
+    # Sort both sides
+    left=($(printf '%s\n' "${left[@]}" | sort -n))
+    right=($(printf '%s\n' "${right[@]}" | sort -n))
+
+    if [[ $direction == "left" ]]; then
+        # Move left, then wrap around to the maximum disk size
+        path+=($(printf '%s\n' "${left[@]}" | sort -nr))  # Process left in descending order
+        path+=(0 "$disk_size")  # Wrap around
+        path+=("${right[@]}")  # Process right in ascending order
+    else
+        # Move right, then wrap around to 0
+        path+=("${right[@]}")  # Process right in ascending order
+        path+=("$disk_size" 0)  # Wrap around
+        path+=($(printf '%s\n' "${left[@]}" | sort -n))  # Process left in ascending order
+    fi
+
+    # Calculate seek time
+    for track in "${path[@]:1}"; do
+        diff=$((track - current_head))
+        seek_time=$((seek_time + ${diff#-}))
+        current_head=$track
+    done
+
+    echo "C-SCAN Total Seek Time: $seek_time"
+    echo "C-SCAN Head Path: ${path[@]}"
+    simulate_head_movement "${path[@]}"
+}
+
+# Function to simulate C-LOOK
+clook() {
+    local requests=("$@")
+    local seek_time=0
+    local current_head=$head
+    local path=("$current_head")
+    local left=()
+    local right=()
+
+    # Divide requests into left and right of the head
+    for track in "${requests[@]}"; do
+        if [[ $track -lt $current_head ]]; then
+            left+=("$track")
+        else
+            right+=("$track")
+        fi
+    done
+
+    # Sort both sides
+    left=($(printf '%s\n' "${left[@]}" | sort -n))
+    right=($(printf '%s\n' "${right[@]}" | sort -n))
+
+    if [[ $direction == "left" ]]; then
+        # Move left, then jump to max request and continue left
+        path+=("${left[@]}" "${right[@]}")
+    else
+        # Move right, then jump to min request and continue right
+        path+=("${right[@]}" "${left[@]}")
+    fi
+
+    # Calculate seek time
+    for track in "${path[@]:1}"; do
+        diff=$((track - current_head))
+        seek_time=$((seek_time + ${diff#-}))
+        current_head=$track
+    done
+
+    echo "C-LOOK Total Seek Time: $seek_time"
+    echo "C-LOOK Head Path: ${path[@]}"
+    simulate_head_movement "${path[@]}"
+}
+
+# Function to simulate head movement
+simulate_head_movement() {
+    local path=("$@")  # Path of head movement
+    echo "Visualizing head movement (Head Path):"
+    for ((i = 0; i < ${#path[@]}; i++)); do
+        echo -n "|"
+        for ((j = 0; j <= disk_size; j++)); do
+            if [[ $j -eq ${path[i]} ]]; then
+                echo -n "H"  # Mark the head position
+            else
+                echo -n "-"
+            fi
+        done
+        echo "| (${path[i]})"
+        sleep 0.5  # Delay for visual effect
+    done
+}
+
+# Select Disk Scheduling Algorithm
+echo "Choose a Disk Scheduling Algorithm:"
+echo "1. FCFS (First-Come, First-Served)"
+echo "2. SSTF (Shortest Seek Time First)"
+echo "3. SCAN (Elevator Algorithm)"
+echo "4. C-SCAN (Circular SCAN)"
+echo "5. C-LOOK (Circular LOOK)"
+read choice
+
+
+# Execute the selected algorithm
+case $choice in
+1)
+    fcfs "${requests[@]}"
+    ;;
+2)
+    sstf "${requests[@]}"
+    ;;
+3)
+    #Set head movement direction
+    echo "Enter the head movement direction (left/right):"
+    read direction
+	scan "${requests[@]}"
+    ;;
+4)
+    #Set head movement direction
+    echo "Enter the head movement direction (left/right):"
+    read direction
+	cscan "${requests[@]}"
+    ;;
+5)
+    #Set head movement direction
+    echo "Enter the head movement direction (left/right):"
+    read direction
+	clook "${requests[@]}"
+    ;;
+*)
+    echo "Invalid choice!"
+    ;;
+esac
