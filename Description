@@ -1,0 +1,24 @@
+Disk Scheduling Simulator
+This Bash script simulates various Disk Scheduling Algorithms, including:
+
+FCFS (First-Come, First-Served)
+SSTF (Shortest Seek Time First)
+SCAN (Elevator Algorithm)
+C-SCAN (Circular SCAN)
+C-LOOK (Circular LOOK)
+
+
+Features
+✅ Reads inputs from external files for disk size, initial head position, and request queue.
+✅ Allows user selection of disk scheduling algorithm.
+✅ Supports visualization of head movement for better understanding.
+✅ Implements efficient sorting and seek time calculations.
+
+How It Works
+The script reads input values from:
+disk_size.txt (Total number of cylinders)
+head_position.txt (Initial head position)
+Request_queue.txt (Space-separated track requests)
+The user selects a disk scheduling algorithm from the menu.
+The selected algorithm is executed, and the total seek time and head movement path are displayed.
+A visual representation of head movement is generated in the terminal.
